@@ -1,43 +1,24 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
-	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
-	"time"
 
 	"github.com/shawnzhang/slack-go/pkg/mcp"
 	"github.com/shawnzhang/slack-go/pkg/slack"
 )
 
-// 设置SSE响应头
-func setSSEHeaders(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-}
-
-// 错误处理函数
-func handleError(w http.ResponseWriter, status int, message string) {
-	setSSEHeaders(w)
-	w.WriteHeader(status)
-	writeSSEEvent(w, "error", map[string]string{
-		"message": message,
-	})
-}
-
 func main() {
+	decoder := json.NewDecoder(os.Stdin)
+	encoder := json.NewEncoder(os.Stdout)
 	// 设置日志输出到stderr
 	log.SetOutput(os.Stderr)
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
-	log.Printf("Starting slack-go MCP server...")
+	log.Printf("启动 slack-go MCP 服务器...")
 
 	// 初始化Slack客户端
 	token := os.Getenv("SLACK_TOKEN")
@@ -47,241 +28,267 @@ func main() {
 	teamID := os.Getenv("SLACK_TEAM_ID")
 
 	if token == "" || teamID == "" {
-		log.Fatal("Please set SLACK_TOKEN (or SLACK_BOT_TOKEN) and SLACK_TEAM_ID environment variables")
+		log.Fatal("请设置 SLACK_TOKEN (或 SLACK_BOT_TOKEN) 和 SLACK_TEAM_ID 环境变量")
 	}
 
 	slackClient := slack.NewClient(token)
 
-	// 创建路由器
-	mux := http.NewServeMux()
-
-	// 添加CORS中间件
-	corsHandler := func(next http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			// 设置CORS头
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-			w.Header().Set("Access-Control-Max-Age", "3600")
-
-			// 处理预检请求
-			if r.Method == "OPTIONS" {
-				w.WriteHeader(http.StatusOK)
-				return
+	for {
+		var request mcp.JSONRPCRequest
+		// 从标准输入读取请求
+		if err := decoder.Decode(&request); err != nil {
+			if err == io.EOF {
+				log.Printf("收到EOF，服务器正常退出")
+				os.Exit(0)
 			}
-
-			// 对于SSE请求，先设置SSE头
-			if r.Header.Get("Accept") == "text/event-stream" {
-				setSSEHeaders(w)
-			}
-
-			next(w, r)
+			log.Printf("解码请求错误: %v", err)
+			sendError(encoder, nil, mcp.ParseError, "解析 JSON 失败")
+			continue
 		}
-	}
 
-	// 健康检查端点
-	mux.HandleFunc("/health", corsHandler(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
-			"status": "ok",
-			"time":   time.Now().Format(time.RFC3339),
-		})
-	}))
+		log.Printf("收到请求: %v", PrettyJSON(request))
 
-	// MCP端点
-	mux.HandleFunc("/mcp/initialize", corsHandler(handleInitialize))
-	mux.HandleFunc("/mcp/tools/list", corsHandler(handleToolsList))
-	mux.HandleFunc("/mcp/slack/list-channels", corsHandler(func(w http.ResponseWriter, r *http.Request) {
-		handleSlackListChannels(w, r, slackClient)
-	}))
-	mux.HandleFunc("/mcp/slack/get-thread-replies", corsHandler(func(w http.ResponseWriter, r *http.Request) {
-		handleSlackGetThreadReplies(w, r, slackClient)
-	}))
-
-	// 创建服务器
-	server := &http.Server{
-		Addr:              ":3333",
-		Handler:           mux,
-		ReadHeaderTimeout: 10 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       120 * time.Second,
-	}
-
-	// 启动HTTP服务器
-	go func() {
-		log.Printf("Starting HTTP server on %s...", server.Addr)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("HTTP server failed: %v", err)
+		if request.JSONRPC != "2.0" {
+			sendError(encoder, request.ID, mcp.InvalidRequest, "仅支持 JSON-RPC 2.0")
+			continue
 		}
-	}()
 
-	// 等待中断信号
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	<-sigChan
+		var response interface{}
 
-	// 优雅关闭服务器
-	log.Println("Shutting down server...")
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("Server shutdown error: %v", err)
-	}
-}
-
-// SSE工具函数
-func writeSSEEvent(w http.ResponseWriter, event string, data interface{}) {
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		log.Printf("Error marshaling SSE data: %v", err)
-		fmt.Fprintf(w, "event: error\ndata: {\"message\": \"Internal server error\"}\n\n")
-		if f, ok := w.(http.Flusher); ok {
-			f.Flush()
-		}
-		return
-	}
-
-	// 发送心跳注释
-	fmt.Fprintf(w, ": heartbeat\n\n")
-
-	// 发送实际事件
-	fmt.Fprintf(w, "event: %s\n", event)
-	fmt.Fprintf(w, "data: %s\n\n", jsonData)
-
-	// 确保数据被发送
-	if f, ok := w.(http.Flusher); ok {
-		f.Flush()
-	}
-}
-
-// 处理初始化请求
-func handleInitialize(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		handleError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	result := mcp.InitializeResult{
-		ProtocolVersion: "2024-11-05",
-		ServerInfo: mcp.ServerInfo{
-			Name:    "slack-go",
-			Version: "1.0.0",
-		},
-		Capabilities: mcp.Capabilities{
-			Tools: map[string]interface{}{},
-		},
-	}
-
-	writeSSEEvent(w, "initialize", result)
-}
-
-// 处理工具列表请求
-func handleToolsList(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		handleError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	tools := []mcp.Tool{
-		{
-			Name:        "slack_list_channels",
-			Description: "List public channels in the workspace with pagination",
-			InputSchema: map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"limit": map[string]interface{}{
-						"type":        "number",
-						"description": "Maximum number of channels to return (default 100, max 200)",
-						"default":     100,
+		switch request.Method {
+		case "initialize":
+			response = mcp.JSONRPCResponse{
+				JSONRPC: "2.0",
+				ID:      request.ID,
+				Result: mcp.InitializeResult{
+					ProtocolVersion: "2024-11-05",
+					ServerInfo: mcp.ServerInfo{
+						Name:    "slack-go",
+						Version: "1.0.0",
 					},
-					"cursor": map[string]interface{}{
-						"type":        "string",
-						"description": "Pagination cursor for next page of results",
+					Capabilities: mcp.Capabilities{
+						Tools: map[string]interface{}{},
 					},
 				},
-			},
-		},
-		{
-			Name:        "slack_get_thread_replies",
-			Description: "Get all replies in a message thread",
-			InputSchema: map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"thread_url": map[string]interface{}{
-						"type":        "string",
-						"description": "The Slack message URL",
+			}
+
+		case "notifications/initialized", "initialized":
+			log.Printf("服务器初始化成功")
+			continue // 跳过发送响应，因为通知不需要响应
+
+		case "tools/list":
+			response = mcp.JSONRPCResponse{
+				JSONRPC: "2.0",
+				ID:      request.ID,
+				Result: mcp.ListToolsResult{
+					Tools: []mcp.Tool{
+						{
+							Name:        "slack_list_channels",
+							Description: "列出工作区中的公共频道（支持分页）",
+							InputSchema: json.RawMessage(`{
+								"type": "object",
+								"properties": {
+									"limit": {
+										"type": "number",
+										"description": "返回的最大频道数量（默认100，最大200）",
+										"default": 100
+									},
+									"cursor": {
+										"type": "string",
+										"description": "用于下一页结果的分页游标"
+									}
+								}
+							}`),
+						},
+						{
+							Name:        "slack_get_thread_replies",
+							Description: "获取消息线程中的所有回复",
+							InputSchema: json.RawMessage(`{
+								"type": "object",
+								"properties": {
+									"thread_url": {
+										"type": "string",
+										"description": "Slack消息URL"
+									}
+								},
+								"required": ["thread_url"]
+							}`),
+						},
 					},
 				},
-				"required": []string{"thread_url"},
-			},
+			}
+
+		case "tools/call":
+			log.Printf("处理 tools/call 请求")
+			params, ok := request.Params.(map[string]interface{})
+			if !ok {
+				log.Printf("错误: 无效的参数类型: %T", request.Params)
+				sendError(encoder, request.ID, mcp.InvalidParams, "无效的参数")
+				continue
+			}
+
+			toolName, ok := params["name"].(string)
+			if !ok {
+				log.Printf("错误: 工具名称未找到或类型无效: %T", params["name"])
+				sendError(encoder, request.ID, mcp.InvalidParams, "无效的工具名称")
+				continue
+			}
+			log.Printf("请求的工具: %s", toolName)
+
+			args, ok := params["arguments"].(map[string]interface{})
+			if !ok {
+				log.Printf("错误: 无效的参数类型: %T", params["arguments"])
+				sendError(encoder, request.ID, mcp.InvalidParams, "无效的参数")
+				continue
+			}
+			log.Printf("收到参数: %v", PrettyJSON(args))
+
+			switch toolName {
+			case "slack_list_channels":
+				limit := 100
+				if l, ok := args["limit"].(float64); ok {
+					limit = int(l)
+					log.Printf("使用提供的限制: %d", limit)
+				} else {
+					log.Printf("使用默认限制: %d", limit)
+				}
+
+				cursor := ""
+				if c, ok := args["cursor"].(string); ok {
+					cursor = c
+					log.Printf("使用提供的游标: %s", cursor)
+				}
+
+				log.Printf("开始获取频道列表...")
+				result, err := slackClient.ListChannels(limit, cursor)
+				if err != nil {
+					log.Printf("获取频道列表失败: %v", err)
+					sendError(encoder, request.ID, mcp.InternalError, fmt.Sprintf("获取频道列表失败: %v", err))
+					continue
+				}
+				log.Printf("成功获取频道列表")
+
+				response = mcp.JSONRPCResponse{
+					JSONRPC: "2.0",
+					ID:      request.ID,
+					Result: mcp.CallToolResult{
+						Content: []mcp.ToolContent{
+							{
+								Type:     "text",
+								Text:     fmt.Sprintf("频道列表：\n%s", string(mustMarshalJSON(result.Channels))),
+								MimeType: "text/plain",
+							},
+						},
+					},
+				}
+
+			case "slack_get_thread_replies":
+				threadURL, ok := args["thread_url"].(string)
+				if !ok || threadURL == "" {
+					log.Printf("错误: 无效的thread_url: %v", args["thread_url"])
+					sendError(encoder, request.ID, mcp.InvalidParams, "thread_url是必需的")
+					continue
+				}
+				log.Printf("处理线程URL: %s", threadURL)
+
+				log.Printf("开始获取线程回复...")
+				result, err := slackClient.GetThreadReplies(threadURL)
+				if err != nil {
+					log.Printf("获取线程回复失败: %v", err)
+					sendError(encoder, request.ID, mcp.InternalError, fmt.Sprintf("获取线程回复失败: %v", err))
+					continue
+				}
+				log.Printf("成功获取线程回复")
+
+				response = mcp.JSONRPCResponse{
+					JSONRPC: "2.0",
+					ID:      request.ID,
+					Result: mcp.CallToolResult{
+						Content: []mcp.ToolContent{
+							{
+								Type:     "text",
+								Text:     fmt.Sprintf("线程回复：\n%s", string(mustMarshalJSON(result.Messages))),
+								MimeType: "text/plain",
+							},
+						},
+					},
+				}
+
+			default:
+				log.Printf("错误: 未知的工具: %s", toolName)
+				sendError(encoder, request.ID, mcp.MethodNotFound, "未知的工具")
+				continue
+			}
+
+		case "cancelled":
+			if params, ok := request.Params.(map[string]interface{}); ok {
+				log.Printf("收到取消通知，请求ID: %v, 原因: %v",
+					params["requestId"], params["reason"])
+			} else {
+				log.Printf("收到取消通知，参数无效")
+			}
+			continue // 跳过发送响应，因为通知不需要响应
+
+		default:
+			sendError(encoder, request.ID, mcp.MethodNotFound, "方法未实现")
+			continue
+		}
+
+		// 发送响应
+		log.Printf("发送响应: %v", PrettyJSON(response))
+		sendResponse(encoder, response)
+	}
+
+	log.Printf("slack-go MCP 服务器退出循环...")
+}
+
+// 发送错误响应
+func sendError(encoder *json.Encoder, id interface{}, code int, message string) {
+	// 对于请求中的null ID，我们应该响应null ID
+	var responseID int
+	if id != nil {
+		if idFloat, ok := id.(float64); ok {
+			responseID = int(idFloat)
+		}
+	}
+
+	response := mcp.JSONRPCResponse{
+		JSONRPC: "2.0",
+		ID:      responseID,
+		Error: &mcp.JSONRPCError{
+			Code:    code,
+			Message: message,
 		},
 	}
 
-	writeSSEEvent(w, "tools/list", mcp.ListToolsResult{Tools: tools})
+	log.Printf("发送错误响应: %v", PrettyJSON(response))
+	if err := encoder.Encode(response); err != nil {
+		log.Printf("编码错误响应失败: %v", err)
+	}
 }
 
-// 处理Slack频道列表请求
-func handleSlackListChannels(w http.ResponseWriter, r *http.Request, client *slack.Client) {
-	if r.Method != http.MethodGet {
-		handleError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
+// 发送响应
+func sendResponse(encoder *json.Encoder, response interface{}) {
+	if err := encoder.Encode(response); err != nil {
+		log.Printf("编码响应失败: %v", err)
 	}
-
-	// 从查询参数获取limit和cursor
-	query := r.URL.Query()
-	limit := 100
-	if l := query.Get("limit"); l != "" {
-		fmt.Sscanf(l, "%d", &limit)
-	}
-	cursor := query.Get("cursor")
-
-	// 发送进度事件
-	writeSSEEvent(w, "progress", map[string]string{
-		"status": "开始获取频道列表...",
-	})
-
-	// 获取频道列表
-	result, err := client.ListChannels(limit, cursor)
-	if err != nil {
-		writeSSEEvent(w, "error", map[string]string{
-			"message": fmt.Sprintf("获取频道列表失败: %v", err),
-		})
-		return
-	}
-
-	writeSSEEvent(w, "result", result)
-	writeSSEEvent(w, "done", nil)
 }
 
-// 处理Slack线程回复请求
-func handleSlackGetThreadReplies(w http.ResponseWriter, r *http.Request, client *slack.Client) {
-	if r.Method != http.MethodGet {
-		handleError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	threadURL := r.URL.Query().Get("thread_url")
-	if threadURL == "" {
-		writeSSEEvent(w, "error", map[string]string{
-			"message": "缺少thread_url参数",
-		})
-		return
-	}
-
-	// 发送进度事件
-	writeSSEEvent(w, "progress", map[string]string{
-		"status": "开始获取线程回复...",
-	})
-
-	// 获取线程回复
-	result, err := client.GetThreadReplies(threadURL)
+// 辅助函数：将数据转换为格式化的JSON字符串
+func PrettyJSON(v interface{}) string {
+	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
-		writeSSEEvent(w, "error", map[string]string{
-			"message": fmt.Sprintf("获取线程回复失败: %v", err),
-		})
-		return
+		return fmt.Sprintf("错误: %v", err)
 	}
+	return string(b)
+}
 
-	writeSSEEvent(w, "result", result)
-	writeSSEEvent(w, "done", nil)
+// 辅助函数：将数据转换为JSON字符串
+func mustMarshalJSON(v interface{}) []byte {
+	data, err := json.Marshal(v)
+	if err != nil {
+		log.Printf("JSON编码失败: %v", err)
+		return []byte("{}")
+	}
+	return data
 }

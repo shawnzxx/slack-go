@@ -16,15 +16,13 @@ if [ "$#" -lt 1 ]; then
   echo "  init              - 初始化请求"
   echo "  list              - 获取工具列表"
   echo "  list_channels     - 列出频道"
-  echo "  post_message      - 发送消息 (需要提供频道ID和消息内容)"
-  echo "  get_thread_replies - 获取消息线程回复 (需要提供Slack消息URL)"
+  echo "  thread_replies    - 获取消息线程回复"
   echo ""
   echo "示例:"
   echo "  $0 init"
   echo "  $0 list"
   echo "  $0 list_channels"
-  echo "  $0 post_message general \"Hello World!\""
-  echo "  $0 get_thread_replies \"https://your-workspace.slack.com/archives/C0734812MFG/p1742788004223029\""
+  echo "  $0 thread_replies"
   exit 1
 fi
 
@@ -84,16 +82,12 @@ list_channels)
         }'
   ;;
 
-get_thread_replies)
-  thread_url="$1"
-
+thread_replies)
+  echo -n "请输入Slack消息URL (例如: https://workspace.slack.com/archives/C0734812MFG/p1742788004223029): " | tee -a "$log_file"
+  read -r thread_url
   if [ -z "$thread_url" ]; then
-    echo -n "请输入Slack消息URL (例如: https://workspace.slack.com/archives/C0734812MFG/p1742788004223029): " | tee -a "$log_file"
-    read -r thread_url
-    if [ -z "$thread_url" ]; then
-      echo "错误: 未提供URL" | tee -a "$log_file"
-      exit 1
-    fi
+    echo "错误: 未提供URL" | tee -a "$log_file"
+    exit 1
   fi
 
   echo "发送获取线程回复请求..." | tee -a "$log_file"
@@ -116,37 +110,6 @@ EOF
   )
   ;;
 
-post_message)
-  if [ "$#" -lt 2 ]; then
-    echo "错误: 发送消息需要提供频道ID和消息内容" | tee -a "$log_file"
-    exit 1
-  fi
-
-  channel="$1"
-  message="$2"
-
-  echo "发送消息请求..." | tee -a "$log_file"
-  echo "频道: $channel" | tee -a "$log_file"
-  echo "消息: $message" | tee -a "$log_file"
-
-  request=$(
-    cat <<EOF
-{
-  "jsonrpc": "2.0",
-  "id": 4,
-  "method": "tools/call",
-  "params": {
-    "name": "slack_post_message",
-    "arguments": {
-      "channel": "$channel",
-      "text": "$message"
-    }
-  }
-}
-EOF
-  )
-  ;;
-
 *)
   echo "错误: 未知的请求类型 '$request_type'" | tee -a "$log_file"
   exit 1
@@ -158,22 +121,9 @@ echo "$request" | jq '.' | tee -a "$log_file"
 echo "" | tee -a "$log_file"
 
 echo "响应内容:" | tee -a "$log_file"
-# 发送请求到已运行的服务
-if [ ! -p "/tmp/slack-mcp-in" ]; then
-  echo "错误: 请先启动服务器 (make run-local)" | tee -a "$log_file"
-  exit 1
-fi
 
-# 发送请求
-echo "$request" >/tmp/slack-mcp-in
-
-# 读取一个响应后自动退出
-read -r response </tmp/slack-mcp-out
-if [[ "$response" =~ ^\{ ]]; then
-  echo "$response" | jq '.' | tee -a "$log_file"
-else
-  echo "$response" | tee -a "$log_file"
-fi
+# 发送请求并获取响应
+echo "$request" | env $(cat local.env | egrep -v '^#' | xargs) go run ./main/main.go | tee -a "$log_file" | jq '.'
 
 echo "" | tee -a "$log_file"
 echo "完整日志已保存到: $log_file"

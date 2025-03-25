@@ -1,23 +1,25 @@
 package mcp
 
+import "encoding/json"
+
 // JSONRPCRequest 表示一个JSON-RPC请求
 type JSONRPCRequest struct {
+	ID      interface{} `json:"id"`
 	JSONRPC string      `json:"jsonrpc"`
-	ID      interface{} `json:"id,omitempty"`
 	Method  string      `json:"method"`
 	Params  interface{} `json:"params,omitempty"`
 }
 
 // JSONRPCResponse 表示一个JSON-RPC响应
 type JSONRPCResponse struct {
-	JSONRPC string      `json:"jsonrpc"`
-	ID      interface{} `json:"id"`
-	Result  interface{} `json:"result,omitempty"`
-	Error   *Error      `json:"error,omitempty"`
+	ID      interface{}   `json:"id"`
+	JSONRPC string        `json:"jsonrpc"`
+	Result  interface{}   `json:"result"`
+	Error   *JSONRPCError `json:"error,omitempty"`
 }
 
-// Error 表示JSON-RPC错误
-type Error struct {
+// JSONRPCError 表示JSON-RPC错误
+type JSONRPCError struct {
 	Code    int         `json:"code"`
 	Message string      `json:"message"`
 	Data    interface{} `json:"data,omitempty"`
@@ -36,16 +38,16 @@ type Capabilities struct {
 
 // InitializeResult 表示初始化结果
 type InitializeResult struct {
+	Capabilities    Capabilities `json:"capabilities"`
 	ProtocolVersion string       `json:"protocolVersion"`
 	ServerInfo      ServerInfo   `json:"serverInfo"`
-	Capabilities    Capabilities `json:"capabilities"`
 }
 
 // Tool 表示一个工具
 type Tool struct {
-	Name        string      `json:"name"`
-	Description string      `json:"description"`
-	InputSchema interface{} `json:"inputSchema"`
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	InputSchema json.RawMessage `json:"inputSchema"`
 }
 
 // Types for resources
@@ -84,8 +86,10 @@ type ListToolsResult struct {
 
 // ToolContent 表示工具调用的响应内容
 type ToolContent struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+	Type     string `json:"type"`
+	Text     string `json:"text"`
+	Data     string `json:"data,omitempty"`
+	MimeType string `json:"mimeType,omitempty"`
 }
 
 // CallToolResult 表示工具调用的结果
