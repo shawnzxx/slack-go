@@ -1,0 +1,103 @@
+[output]
+formats = [
+  { format = "colored-line-number" },
+]
+
+
+[linters-settings.govet]
+disable-all = true
+enable = [
+  "appends",
+  "asmdecl",
+  "assign",
+  "atomic",
+  "atomicalign",
+  "bools",
+  "buildtag",
+  "cgocall",
+  "composites",
+  "copylocks",
+  "deepequalerrors",
+  "defers",
+  "directive",
+  "errorsas",
+  # "fieldalignment",
+  "findcall",
+  "framepointer",
+  "httpresponse",
+  "ifaceassert",
+  "loopclosure",
+  "lostcancel",
+  "nilfunc",
+  "nilness",
+  "printf",
+  "reflectvaluecompare",
+  "shadow",
+  "shift",
+  "sigchanyzer",
+  "slog",
+  "sortslice",
+  "stdmethods",
+  "stringintconv",
+  "structtag",
+  "testinggoroutine",
+  "tests",
+  "unmarshal",
+  "unreachable",
+  "unsafeptr",
+  "unusedresult",
+  "unusedwrite"
+]
+
+[linters]
+enable = [
+    # Visit https://golangci-lint.run/usage/linters/
+    # for the full, current list of available linters.
+    
+    # Default linters
+    "unused", # Detect unused constants, variables, functions and types
+    "errcheck", # Detect unchecked errors
+    "gosimple", # Suggest code simplifications
+    "govet", # Reports suspicious constructs
+    "ineffassign", # Detects unused variable assignments
+    "staticcheck", # go vet on steroids
+    "typecheck", # Standard Go type checks
+
+    # Suggested additional linters
+    "gocyclo", # or "cyclop", # Detect cyclomatic complexity
+    "goconst", # Detect repeated values that can be made constants
+    "gofmt", # Or "gofmt", # Enforce standard formatting
+    "goimports", # Ensure standard import formatting/ordering
+    "misspell", # Fix spelling errors
+    # "revive",  # General purpose linter
+    "unconvert", # Detect unnecessary type conversions
+    "unparam", # Detect unused function parameters
+
+    # Optional
+    "bodyclose", # Check whether HTTP response bodies are closed
+    # "goerr113", # Enforce standard error handling practices
+    # "depguard", # Forbid certain package imports
+    # "dupl", # Detect duplicate code
+    # "errchkjson", # some JSON-specific checks
+    # "gomnd", # Magic number detection
+    "nakedret", # Detect naked returns
+    # "rowserrcheck", # Check whether Err of rows is checked
+    # "sqlclosecheck", # Ensure sql.Rows and sql.Stmt are closed
+    "tparallel", # Detects inappropriate use of t.Parallel()
+]
+
+
+[linters-settings.govet.settings.printf]
+funcs = [
+  "(github.com/golangci/golangci-lint/pkg/logutils.Log).Infof",
+  "(github.com/golangci/golangci-lint/pkg/logutils.Log).Warnf",
+  "(github.com/golangci/golangci-lint/pkg/logutils.Log).Errorf",
+  "(github.com/golangci/golangci-lint/pkg/logutils.Log).Fatalf"
+]
+
+[linters-settings.govet.settings.shadow]
+strict = true
+
+[issues]
+exclude-use-default = false
+

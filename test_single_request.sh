@@ -1,5 +1,28 @@
 #!/bin/bash
 
+#####################################################################
+# 测试脚本：用于测试 Slack MCP 服务器的各种请求
+#
+# 功能：
+# - 发送初始化请求 (init)
+# - 获取工具列表 (list)
+# - 列出 Slack 频道 (list_channels)
+# - 获取消息线程回复 (thread_replies)
+#
+# 使用方法：
+# 1. 确保已安装 jq 工具
+# 2. 确保 local.env 文件中包含必要的环境变量
+# 3. 运行命令：./test_single_request.sh <请求类型>
+#
+# 环境要求：
+# - jq：用于 JSON 处理
+# - local.env：包含 SLACK_TOKEN 和 SLACK_TEAM_ID
+#
+# 输出：
+# - 在终端显示请求和响应
+# - 同时保存到 logs 目录下的日志文件
+#####################################################################
+
 # 检查是否安装了jq
 if ! command -v jq &>/dev/null; then
   echo "错误: 请先安装 jq 工具"
@@ -44,42 +67,48 @@ case "$request_type" in
 init)
   echo "发送初始化请求..." | tee -a "$log_file"
   request='{
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05",
-                "clientInfo": {
-                    "name": "single-request-client",
-                    "version": "1.0.0"
-                },
-                "capabilities": {}
-            }
-        }'
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "0.1.0",
+      "clientInfo": {
+        "name": "single-request-client",
+        "version": "1.0.0",
+        "publisher": "shawnzhang"
+      },
+      "capabilities": {
+        "tools": true,
+        "resources": true,
+        "prompts": false
+      }
+    }
+  }'
   ;;
 
 list)
   echo "发送工具列表请求..." | tee -a "$log_file"
   request='{
-            "jsonrpc": "2.0",
-            "id": 2,
-            "method": "tools/list"
-        }'
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tools/list",
+    "params": {}
+  }'
   ;;
 
 list_channels)
   echo "发送列出频道请求..." | tee -a "$log_file"
   request='{
-            "jsonrpc": "2.0",
-            "id": 3,
-            "method": "tools/call",
-            "params": {
-                "name": "slack_list_channels",
-                "arguments": {
-                    "limit": 100
-                }
-            }
-        }'
+    "jsonrpc": "2.0",
+    "id": 3,
+    "method": "tools/call",
+    "params": {
+      "name": "slack_list_channels",
+      "arguments": {
+        "limit": 100
+      }
+    }
+  }'
   ;;
 
 thread_replies)
@@ -93,21 +122,19 @@ thread_replies)
   echo "发送获取线程回复请求..." | tee -a "$log_file"
   echo "消息URL: $thread_url" | tee -a "$log_file"
 
-  request=$(
-    cat <<EOF
-{
-  "jsonrpc": "2.0",
-  "id": 5,
-  "method": "tools/call",
-  "params": {
-    "name": "slack_get_thread_replies",
-    "arguments": {
-      "thread_url": "$thread_url"
-    }
-  }
-}
-EOF
-  )
+  request=$(jq -n \
+    --arg url "$thread_url" \
+    '{
+      "jsonrpc": "2.0",
+      "id": 5,
+      "method": "tools/call",
+      "params": {
+        "name": "slack_get_thread_replies",
+        "arguments": {
+          "thread_url": $url
+        }
+      }
+    }')
   ;;
 
 *)
@@ -122,8 +149,36 @@ echo "" | tee -a "$log_file"
 
 echo "响应内容:" | tee -a "$log_file"
 
-# 发送请求并获取响应
-echo "$request" | env $(cat local.env | egrep -v '^#' | xargs) go run ./main/main.go | tee -a "$log_file" | jq '.'
+# 创建日志文件
+server_log_file="logs/server_${log_date}.log"
+error_log_file="logs/error_${log_date}.log"
+echo -e "\n[${current_time}] ====== 服务器日志 =====" >>"$server_log_file"
+echo -e "\n[${current_time}] ====== 错误日志 =====" >>"$error_log_file"
+
+# 检查初始 JSON 格式
+if ! echo "$request" | jq -c '.' >/dev/null 2>>"$error_log_file"; then
+  echo "错误: JSON 格式无效" | tee -a "$error_log_file"
+  exit 1
+fi
+
+# 运行命令，分别处理标准输出、标准错误和其他错误
+(
+  echo "$request" |
+    jq -c '.' 2>>"$error_log_file" |
+    env $(cat local.env | egrep -v '^#' | xargs) go run ./main/main.go 2>>"$server_log_file" |
+    tee -a "$log_file" |
+    jq '.' 2>>"$error_log_file"
+) || {
+  echo "错误: 命令执行失败，详细信息请查看错误日志" | tee -a "$error_log_file"
+  exit 1
+}
 
 echo "" | tee -a "$log_file"
 echo "完整日志已保存到: $log_file"
+echo "服务器日志已保存到: $server_log_file"
+echo "错误日志已保存到: $error_log_file"
+
+# 如果错误日志不为空，提示查看
+if [ -s "$error_log_file" ]; then
+  echo "警告: 检测到错误，请查看错误日志文件"
+fi

@@ -25,3 +25,9 @@ clean:
 # 清理测试logs
 clean-logs:
 	rm -rf logs/
+
+# ----------------------------
+# Development utility
+# ----------------------------
+go-lint:
+	(cd ./main && golangci-lint run --config ../.golangci.toml)

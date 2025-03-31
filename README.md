@@ -1,6 +1,6 @@
 # Slack-Go MCP Server
 
-这是一个用Go语言实现的Slack MCP (Model Context Protocol) 服务器。它提供了与Slack API交互的各种功能，包括发送消息、获取频道历史记录、添加表情反应等。
+这是一个用 Go 语言实现的 Slack MCP (Model Context Protocol) 服务器。它提供了与 Slack API 交互的各种功能，包括发送消息、获取频道历史记录、添加表情反应等。此版本使用[mark3labs/mcp-go](https://github.com/mark3labs/mcp-go)库实现 MCP 协议。
 
 ## 功能特性
 
@@ -23,8 +23,8 @@
 
 程序需要以下环境变量：
 
-- `SLACK_TOKEN` 或 `SLACK_BOT_TOKEN`：Slack API的访问令牌
-- `SLACK_TEAM_ID`：Slack工作区的Team ID
+- `SLACK_TOKEN` 或 `SLACK_BOT_TOKEN`：Slack API 的访问令牌
+- `SLACK_TEAM_ID`：Slack 工作区的 Team ID
 
 ## 安装
 
@@ -61,9 +61,14 @@ slack-go/
 └── README.md        # 项目文档
 ```
 
-## API工具
+## 技术栈
 
-服务器提供以下MCP工具：
+- [mark3labs/mcp-go](https://github.com/mark3labs/mcp-go) - MCP 协议的 Go 实现
+- [slack-go/slack](https://github.com/slack-go/slack) - Slack API 的 Go 客户端库
+
+## API 工具
+
+服务器提供以下 MCP 工具：
 
 - `slack_list_channels`: 列出工作区中的公共频道
 - `slack_post_message`: 发送消息到频道
