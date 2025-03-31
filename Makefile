@@ -9,12 +9,12 @@ bin:
 
 # 构建目标
 build: bin
-	@echo "Building slack-mcp binary..."
+	@echo "构建 slack-mcp 二进制文件..."
 	go build -o bin/slack-mcp ./main
-	@echo "Build successful! Binary located at bin/slack-mcp"
+	@echo "构建成功！二进制文件位于 bin/slack-mcp"
 
 # 运行目标
-run-local:
+run:
 	env $$(cat local.env | egrep -v '^#' | xargs) \
 		go run ./main/main.go
 
@@ -25,3 +25,9 @@ clean:
 # 清理测试logs
 clean-logs:
 	rm -rf logs/
+
+# ----------------------------
+# Development utility
+# ----------------------------
+go-lint:
+	(cd ./main && golangci-lint run --config ../.golangci.toml)
