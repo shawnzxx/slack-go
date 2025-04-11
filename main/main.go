@@ -61,6 +61,19 @@ func main() {
 		),
 	)
 
+	// define tools: postMessageTool
+	postMessageTool := mcp.NewTool("post_message",
+		mcp.WithDescription("post a message to a Slack channel"),
+		mcp.WithString("channel_id",
+			mcp.Required(),
+			mcp.Description("ID of the channel to post the message to"),
+		),
+		mcp.WithString("text",
+			mcp.Required(),
+			mcp.Description("Text of the message to post"),
+		),
+	)
+
 	// add tools and handle functions
 	s.AddTool(listChannelsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		limit := 100
@@ -118,6 +131,37 @@ func main() {
 		}
 
 		return mcp.NewToolResultText(fmt.Sprintf("thread replies: \n%s", string(messagesJSON))), nil
+	})
+
+	s.AddTool(postMessageTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		channelID, ok := request.Params.Arguments["channel_id"].(string)
+		if !ok || channelID == "" {
+			log.Printf("error: invalid channel_id: %v", request.Params.Arguments["channel_id"])
+			return nil, fmt.Errorf("channel_id is required")
+		}
+
+		text, ok := request.Params.Arguments["text"].(string)
+		if !ok || text == "" {
+			log.Printf("error: invalid text: %v", request.Params.Arguments["text"])
+			return nil, fmt.Errorf("text is required")
+		}
+
+		log.Printf("posting message to channel: %s", channelID)
+
+		// call slack api to post message
+		message, err := slackClient.PostMessage(channelID, text)
+		if err != nil {
+			log.Printf("failed to post message: %v", err)
+			return nil, fmt.Errorf("failed to post message: %v", err)
+		}
+		log.Printf("success to post message")
+
+		messageJSON, err := json.Marshal(message)
+		if err != nil {
+			return nil, fmt.Errorf("failed to serialize message: %v", err)
+		}
+
+		return mcp.NewToolResultText(fmt.Sprintf("message posted: \n%s", string(messageJSON))), nil
 	})
 
 	// start standard input/output server

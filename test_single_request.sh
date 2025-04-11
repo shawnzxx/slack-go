@@ -8,6 +8,7 @@
 # - 获取工具列表 (list)
 # - 列出 Slack 频道 (list_channels)
 # - 获取消息线程回复 (thread_replies)
+# - 发布消息到 Slack 频道 (post_message)
 #
 # 使用方法：
 # 1. 确保已安装 jq 工具
@@ -40,12 +41,14 @@ if [ "$#" -lt 1 ]; then
   echo "  list              - 获取工具列表"
   echo "  list_channels     - 列出频道"
   echo "  thread_replies    - 获取消息线程回复"
+  echo "  post_message      - 发布消息到 Slack 频道"
   echo ""
   echo "示例:"
   echo "  $0 init"
   echo "  $0 list"
   echo "  $0 list_channels"
   echo "  $0 thread_replies"
+  echo "  $0 post_message"
   exit 1
 fi
 
@@ -86,7 +89,7 @@ init)
   }'
   ;;
 
-list)
+list_tools)
   echo "发送工具列表请求..." | tee -a "$log_file"
   request='{
     "jsonrpc": "2.0",
@@ -132,6 +135,42 @@ thread_replies)
         "name": "slack_get_thread_replies",
         "arguments": {
           "thread_url": $url
+        }
+      }
+    }')
+  ;;
+
+post_message)
+  echo -n "请输入Slack频道ID: " | tee -a "$log_file"
+  read -r channel_id
+  if [ -z "$channel_id" ]; then
+    echo "错误: 未提供频道ID" | tee -a "$log_file"
+    exit 1
+  fi
+
+  echo -n "请输入消息文本: " | tee -a "$log_file"
+  read -r text
+  if [ -z "$text" ]; then
+    echo "错误: 未提供消息文本" | tee -a "$log_file"
+    exit 1
+  fi
+
+  echo "发送发布消息请求..." | tee -a "$log_file"
+  echo "频道ID: $channel_id" | tee -a "$log_file"
+  echo "消息文本: $text" | tee -a "$log_file"
+
+  request=$(jq -n \
+    --arg channel_id "$channel_id" \
+    --arg text "$text" \
+    '{
+      "jsonrpc": "2.0",
+      "id": 6,
+      "method": "tools/call",
+      "params": {
+        "name": "post_message",
+        "arguments": {
+          "channel_id": $channel_id,
+          "text": $text
         }
       }
     }')

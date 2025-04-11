@@ -15,3 +15,7 @@ api/binaries
 # configuration files
 local.env
 secret.env
+
+# logs
+logs
+logs/*

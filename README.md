@@ -48,37 +48,54 @@ export SLACK_TEAM_ID="your-team-id"
 ./bin/slack-mcp
 ```
 
-## 项目结构
+## project structure
+
+### folder hierarchy
 
 ```
 slack-go/
 ├── main/
-│   └── main.go       # 主程序入口
+│ └── main.go # Main entry point of the application
 ├── pkg/
-│   └── slack/        # Slack客户端实现
-│       └── client.go
-├── go.mod           # Go模块定义
-└── README.md        # 项目文档
+│ └── slack/ # Implementation of the Slack client
+│ └── client.go
+├── vendor/ # Vendor directory for dependencies
+├── go.mod # Go module definition
+├── go.sum # Go module dependencies checksum
+├── Makefile # Makefile for build automation
+├── README.md # Project documentation
+└── test_single_request.sh # Script for testing single requests to the Slack MCP server
 ```
 
-## 技术栈
+### folder description
 
-- [mark3labs/mcp-go](https://github.com/mark3labs/mcp-go) - MCP 协议的 Go 实现
+- **main/**: Contains the main entry point of the application where the server is initialized and started.
+- **pkg/slack/**: Contains the implementation of the Slack client, which wraps the Slack API functionalities.
+- **vendor/**: Holds the vendored dependencies to ensure consistent builds.
+- **go.mod**: Defines the module's dependencies and versions.
+- **go.sum**: Contains checksums for the module's dependencies.
+- **Makefile**: Provides build automation tasks such as building the binary and managing dependencies.
+- **README.md**: Provides documentation about the project, including setup, usage, and features.
+- **test_single_request.sh**: A script to test various requests to the Slack MCP server, ensuring the server's functionalities are working as expected.
+
+## tech stack
+
+- [mark3labs/mcp-go](https://github.com/mark3labs/mcp-go) - 实现 MCP 协议的 Go 库
 - [slack-go/slack](https://github.com/slack-go/slack) - Slack API 的 Go 客户端库
 
-## API 工具
+## API tools
 
-服务器提供以下 MCP 工具：
+The server provides the following MCP tools:
 
-- `slack_list_channels`: 列出工作区中的公共频道
-- `slack_post_message`: 发送消息到频道
-- `slack_reply_to_thread`: 在线程中回复消息
-- `slack_add_reaction`: 添加表情反应
-- `slack_get_channel_history`: 获取频道历史记录
-- `slack_get_thread_replies`: 获取线程回复
-- `slack_get_users`: 获取用户列表
-- `slack_get_user_profile`: 获取用户资料
+- `slack_list_channels`: List public channels in the workspace
+- `slack_post_message`: Send a message to a channel
+- `slack_reply_to_thread`: Reply to a message in a thread
+- `slack_add_reaction`: Add an emoji reaction
+- `slack_get_channel_history`: Get the history of a channel
+- `slack_get_thread_replies`: Get replies to a message in a thread
+- `slack_get_users`: Get the list of users
+- `slack_get_user_profile`: Get the profile of a user
 
-## 许可证
+## license
 
 MIT License
