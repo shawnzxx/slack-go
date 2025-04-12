@@ -1,0 +1,53 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# How to create new MCP tools
+
+## Understanding the Project
+
+- the project structure inside the README.md, you can find the folder hierarchy and the folder description.
+
+## Adding a New Function
+
+1. **Define the Function**:
+
+   - Identify the purpose and parameters of the new function.
+   - Implement the function in the appropriate file, ensuring it follows existing code patterns.
+
+2. **Integrate with Existing Code**:
+
+   - Ensure the new function is properly integrated with existing modules or classes.
+   - Update any necessary interfaces or APIs to accommodate the new function.
+
+3. **Document the Function**:
+   - Add comments and documentation to explain the function's purpose, parameters, and return values.
+
+## Creating a Test scripts
+
+1. **Implement the Test scripts**:
+
+   - Create a new test script inside the `test_single_request.sh` file or update an existing one to include the new test scripts.
+   - Use a consistent format and tools (e.g., `jq` for JSON processing) for test scripts.
+
+## Local Testing
+
+1. **Run the Test Script**:
+
+   - After implementing the function and test script, execute the test script locally.
+   - Before run local test script inside the `test_single_request.sh` file, you should run the golang server command with `make run` inside the root folder.
+   - Verify that the function behaves as expected behivour.
+
+2. **Review Logs**:
+
+   - Check the log files inside the `logs` folder for any errors or unexpected behavior.
+   - Make necessary adjustments to the function or test script based on the test results.
+
+3. **Iterate as Needed**:
+   - Repeat the testing process until the function performs correctly in all scenarios.
+
+## Automation
+
+- AI should automatically execute the test script after completing the implementation of a new function.
