@@ -1,56 +1,143 @@
 # Slack-Go MCP Server
 
-这是一个用 Go 语言实现的 Slack MCP (Model Context Protocol) 服务器。它提供了与 Slack API 交互的各种功能，包括发送消息、获取频道历史记录、添加表情反应等。此版本使用[mark3labs/mcp-go](https://github.com/mark3labs/mcp-go)库实现 MCP 协议。
+这是一个用 Go 语言实现的 Slack MCP (Model Context Protocol) 服务器。
 
-## 功能特性
+它提供了与 Slack API 交互的各种功能，包括发送消息、获取频道历史记录、添加表情反应等。此版本使用[mark3labs/mcp-go](https://github.com/mark3labs/mcp-go)库实现 MCP 协议。
 
-- 列出工作区中的公共频道
-- 发送消息到频道
-- 在线程中回复消息
-- 添加表情反应
-- 获取频道历史记录
-- 获取线程回复
-- 获取用户列表
-- 获取用户资料
+## Tools
 
-## 环境要求
+1. `slack_list_channels`
 
-- Go 1.21 或更高版本
-- Slack API Token
-- Slack Team ID
+   - List public channels in the workspace
+   - Optional inputs:
+     - `limit` (number, default: 100, max: 200): Maximum number of channels to return
+     - `cursor` (string): Pagination cursor for next page
+   - Returns: List of channels with their IDs and information
 
-## 环境变量
+2. `slack_post_message`
 
-程序需要以下环境变量：
+   - Post a new message to a Slack channel
+   - Required inputs:
+     - `channel_id` (string): The ID of the channel to post to
+     - `text` (string): The message text to post
+   - Returns: Message posting confirmation and timestamp
 
-- `SLACK_TOKEN` 或 `SLACK_BOT_TOKEN`：Slack API 的访问令牌
-- `SLACK_TEAM_ID`：Slack 工作区的 Team ID
+3. `slack_get_thread_replies`
 
-## 安装
+   - Get all replies in a message thread
+   - Required inputs:
+     - `thread_url` (string): Slack message URL
+       - Format: https://{workspace}.slack.com/archives/{channel_id}/{message_id}
+       - URL 组成部分说明:
+         - workspace: 你的 Slack 工作区名称
+         - channel_id: 以 'C' 开头的频道 ID
+         - message_id: 以 'p' 开头的消息 ID，包含时间戳
+       - 示例:
+         - 标准格式: https://myworkspace.slack.com/archives/C0123ABCDEF/p1234567890123456
+         - 私有频道: https://myworkspace.slack.com/archives/C0123ABCDEF/p1234567890123456
+         - 共享频道: https://myworkspace.slack.com/archives/C0123ABCDEF/p1234567890123456?thread_ts=1234567890.123456
+   - Returns: List of replies with their content and metadata
+   - 注意:
+     - URL 可以从 Slack 客户端中通过右键点击消息并选择"Copy link"获取
+     - 消息 ID 中的时间戳部分对应消息发送的 Unix 时间戳
 
-```bash
-git clone https://github.com/yourusername/slack-go
-cd slack-go
-go mod download
-```
+4. `slack_get_users_profile`
 
-## 编译
+   - Get detailed profile information for multiple users
+   - Required inputs:
+     - `user_ids` (array of strings): Array of user IDs to get profiles for
+       - Format: 每个用户 ID 都以 'U' 开头，后跟数字和字母的组合
+       - 示例:
+         - 单个用户: ["U0123ABCDEF"]
+         - 多个用户: ["U0123ABCDEF", "U9876ZYXWVU", "U5432ABCDEF"]
+       - 常见错误格式:
+         - ❌ 不带引号: [U0123ABCDEF]
+         - ❌ 不使用数组: "U0123ABCDEF"
+         - ❌ 错误前缀: ["B0123ABCDEF"] (Bot 用户使用 'B' 前缀)
+         - ❌ 使用 @ 符号: ["@username"]
+         - ❌ 使用邮箱: ["user@example.com"]
+   - Returns: Array of user profile information including:
+     - Name
+     - First Name
+     - Last Name
+     - Real Name
+     - Display Name
+     - Email
+     - Title
+   - 注意:
+     - 用户 ID 可以从 Slack 客户端中通过右键点击用户名并选择"Copy member ID"获取
+     - 也可以从用户的 Slack 个人资料页面 URL 中获取
+     - 每次调用最多支持 30 个用户 ID
+     - 对于不存在的用户 ID 会返回错误
+     - 需要确保有足够的权限访问用户资料信息
+   - 使用示例:
+     ```json
+     {
+       "user_ids": ["U0123ABCDEF", "U9876ZYXWVU"]
+     }
+     ```
+   - 返回示例:
+     ```json
+     [
+       {
+         "name": "john.doe",
+         "first_name": "John",
+         "last_name": "Doe",
+         "real_name": "John Doe",
+         "display_name": "johndoe",
+         "email": "john.doe@example.com",
+         "title": "Software Engineer"
+       },
+       {
+         "name": "jane.smith",
+         "first_name": "Jane",
+         "last_name": "Smith",
+         "real_name": "Jane Smith",
+         "display_name": "jsmith",
+         "email": "jane.smith@example.com",
+         "title": "Product Manager"
+       }
+     ]
+     ```
 
-```bash
-go build -o bin/slack-mcp ./main
-```
+## Environment Variables
 
-## 运行
+The application requires the following environment variables:
 
-```bash
-export SLACK_TOKEN="xoxb-your-token"
-export SLACK_TEAM_ID="your-team-id"
-./bin/slack-mcp
-```
+- `SLACK_TOKEN` this token were automatically generated when you installed the app to SP Digital.
+- get token from link: https://api.slack.com/apps/A08FM2YG0E5/oauth?
+- `SLACK_TEAM_ID`: Your Slack workspace Team ID
 
-## project structure
+### Local Testing Setup
 
-### folder hierarchy
+For local testing, create a `local.env` file in the project root directory:
+
+1. Create the file:
+
+   ```bash
+   touch local.env
+   ```
+
+2. Add your Slack credentials to `local.env`:
+
+   ```env
+   SLACK_TOKEN=xoxb-your-slack-token-here
+   SLACK_TEAM_ID=your-team-id-here
+   ```
+
+   Note:
+
+   - For `SLACK_TOKEN`, you can use either a bot token (starts with `xoxb-`) or a user token (starts with `xoxp-`)
+   - The `SLACK_TEAM_ID` can be found in your Slack workspace URL or workspace settings
+
+3. Security considerations:
+   - Never commit `local.env` to version control
+   - Keep your tokens secure and rotate them regularly
+   - Make sure `local.env` is included in `.gitignore`
+
+The test script (`test_single_request.sh`) will automatically load these environment variables from `local.env` when running tests.
+
+## folder hierarchy
 
 ```
 slack-go/
@@ -80,21 +167,8 @@ slack-go/
 
 ## tech stack
 
-- [mark3labs/mcp-go](https://github.com/mark3labs/mcp-go) - 实现 MCP 协议的 Go 库
-- [slack-go/slack](https://github.com/slack-go/slack) - Slack API 的 Go 客户端库
-
-## API tools
-
-The server provides the following MCP tools:
-
-- `slack_list_channels`: List public channels in the workspace
-- `slack_post_message`: Send a message to a channel
-- `slack_reply_to_thread`: Reply to a message in a thread
-- `slack_add_reaction`: Add an emoji reaction
-- `slack_get_channel_history`: Get the history of a channel
-- `slack_get_thread_replies`: Get replies to a message in a thread
-- `slack_get_users`: Get the list of users
-- `slack_get_user_profile`: Get the profile of a user
+- [mark3labs/mcp-go](https://github.com/mark3labs/mcp-go) - implement MCP protocol in Go
+- [slack-go/slack](https://github.com/slack-go/slack) - Slack API client in Go
 
 ## license
 
