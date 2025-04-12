@@ -131,6 +131,43 @@ func (c *Client) GetUserProfile(userID string) (*slack.UserProfile, error) {
 	return &user.Profile, nil
 }
 
+// GetFilteredUserProfile gets filtered user profile information
+func (c *Client) GetFilteredUserProfile(userID string) (*UserProfileInfo, error) {
+	user, err := c.api.GetUserInfo(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &UserProfileInfo{
+		Name:        user.Name,
+		FullName:    user.Profile.RealName,
+		DisplayName: user.Profile.DisplayName,
+		Email:       user.Profile.Email,
+		Title:       user.Profile.Title,
+	}, nil
+}
+
+// GetFilteredUsersProfile gets filtered user profile information for multiple users
+func (c *Client) GetFilteredUsersProfile(userIDs []string) ([]*UserProfileInfo, error) {
+	users, err := c.api.GetUsersInfo(userIDs...)
+	if err != nil {
+		return nil, err
+	}
+
+	profiles := make([]*UserProfileInfo, 0, len(*users))
+	for _, user := range *users {
+		profiles = append(profiles, &UserProfileInfo{
+			Name:        user.Name,
+			FullName:    user.Profile.RealName,
+			DisplayName: user.Profile.DisplayName,
+			Email:       user.Profile.Email,
+			Title:       user.Profile.Title,
+		})
+	}
+
+	return profiles, nil
+}
+
 // ListChannels lists all public channels in the workspace
 func (c *Client) ListChannels(limit int, cursor string) (*GetConversationsResponse, error) {
 	params := &slack.GetConversationsParameters{

@@ -74,6 +74,15 @@ func main() {
 		),
 	)
 
+	// define tools: slack_get_users_profile
+	getUsersProfileTool := mcp.NewTool("slack_get_users_profile",
+		mcp.WithDescription("get multiple users' profile information"),
+		mcp.WithArray("user_ids",
+			mcp.Required(),
+			mcp.Description("Array of user IDs to get profiles for"),
+		),
+	)
+
 	// add tools and handle functions
 	s.AddTool(listChannelsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		limit := 100
@@ -162,6 +171,43 @@ func main() {
 		}
 
 		return mcp.NewToolResultText(fmt.Sprintf("message posted: \n%s", string(messageJSON))), nil
+	})
+
+	s.AddTool(getUsersProfileTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		// 获取并验证用户ID数组
+		userIDsInterface, ok := request.Params.Arguments["user_ids"].([]interface{})
+		if !ok || len(userIDsInterface) == 0 {
+			log.Printf("error: invalid user_ids: %v", request.Params.Arguments["user_ids"])
+			return nil, fmt.Errorf("user_ids array is required and cannot be empty")
+		}
+
+		// 转换interface{}数组为string数组
+		userIDs := make([]string, len(userIDsInterface))
+		for i, v := range userIDsInterface {
+			userID, ok := v.(string)
+			if !ok || userID == "" {
+				return nil, fmt.Errorf("invalid user ID at position %d", i)
+			}
+			userIDs[i] = userID
+		}
+
+		log.Printf("getting profiles for users: %v", userIDs)
+
+		// 调用slack api获取多个用户的资料
+		profiles, err := slackClient.GetFilteredUsersProfile(userIDs)
+		if err != nil {
+			log.Printf("failed to get user profiles: %v", err)
+			return nil, fmt.Errorf("failed to get user profiles: %v", err)
+		}
+		log.Printf("success to get user profiles")
+
+		// 序列化结果
+		profilesJSON, err := json.Marshal(profiles)
+		if err != nil {
+			return nil, fmt.Errorf("failed to serialize user profiles: %v", err)
+		}
+
+		return mcp.NewToolResultText(fmt.Sprintf("user profiles: \n%s", string(profilesJSON))), nil
 	})
 
 	// start standard input/output server

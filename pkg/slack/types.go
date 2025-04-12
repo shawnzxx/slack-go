@@ -34,6 +34,20 @@ type GetConversationsResponse struct {
 	}
 }
 
+// UserProfileInfo represents filtered user profile information
+type UserProfileInfo struct {
+	// Name is the username of the Slack user (e.g. johndoe)
+	Name string `json:"name"`
+	// FullName is the actual name of the Slack user (e.g. John Doe)
+	FullName string `json:"full_name"`
+	// DisplayName is the display name set by the user in their profile
+	DisplayName string `json:"display_name"`
+	// Email is the user's email address
+	Email string `json:"email"`
+	// Title is the user's job title or role in the organization
+	Title string `json:"title"`
+}
+
 // GetThreadRepliesResponse represents the response from a GetThreadReplies call
 type GetThreadRepliesResponse struct {
 	Messages []slack.Message

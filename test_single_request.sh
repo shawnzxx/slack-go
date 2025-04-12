@@ -9,6 +9,7 @@
 # - 列出 Slack 频道 (list_channels)
 # - 获取消息线程回复 (thread_replies)
 # - 发布消息到 Slack 频道 (post_message)
+# - 获取用户资料信息 (get_users_profile)
 #
 # 使用方法：
 # 1. 确保已安装 jq 工具
@@ -42,6 +43,7 @@ if [ "$#" -lt 1 ]; then
   echo "  list_channels     - 列出频道"
   echo "  thread_replies    - 获取消息线程回复"
   echo "  post_message      - 发布消息到 Slack 频道"
+  echo "  get_users_profile - 获取多个用户资料信息"
   echo ""
   echo "示例:"
   echo "  $0 init"
@@ -49,6 +51,7 @@ if [ "$#" -lt 1 ]; then
   echo "  $0 list_channels"
   echo "  $0 thread_replies"
   echo "  $0 post_message"
+  echo "  $0 get_users_profile"
   exit 1
 fi
 
@@ -171,6 +174,44 @@ post_message)
         "arguments": {
           "channel_id": $channel_id,
           "text": $text
+        }
+      }
+    }')
+  ;;
+
+get_users_profile)
+  echo -n "请输入用户ID (多个ID用空格分隔): " | tee -a "$log_file"
+  read -r user_ids_input
+  if [ -z "$user_ids_input" ]; then
+    echo "错误: 未提供用户ID" | tee -a "$log_file"
+    exit 1
+  fi
+
+  # 将输入转换为数组
+  IFS=' ' read -r -a user_ids_array <<<"$user_ids_input"
+
+  # 验证是否至少有一个ID
+  if [ ${#user_ids_array[@]} -eq 0 ]; then
+    echo "错误: 至少需要提供一个用户ID" | tee -a "$log_file"
+    exit 1
+  fi
+
+  echo "发送获取用户资料请求..." | tee -a "$log_file"
+  echo "用户IDs: $user_ids_input" | tee -a "$log_file"
+
+  # 构建JSON数组
+  json_array=$(printf '%s\n' "${user_ids_array[@]}" | jq -R . | jq -s .)
+
+  request=$(jq -n \
+    --argjson user_ids "$json_array" \
+    '{
+      "jsonrpc": "2.0",
+      "id": 7,
+      "method": "tools/call",
+      "params": {
+        "name": "slack_get_users_profile",
+        "arguments": {
+          "user_ids": $user_ids
         }
       }
     }')
